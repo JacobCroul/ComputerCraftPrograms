@@ -3,23 +3,22 @@
 --
 -- This worker:
 --  - Reads energy stored in up to 3 battery boxes
---  - Aggregates their total FE locally
---  - Reports the value to the Powerstation API
---  - Identifies itself via a sensor ID
+--  - Aggregates their total FE and capacity locally (per Option A: sum in Lua, not the API)
+--  - Reports the combined total to the Powerstation API
 --
--- This worker does NOT receive commands.
--- It is a pure telemetry source.
+-- This worker does NOT receive commands. It is a pure telemetry source.
 
 local CONFIG = {
-    SENSOR_ID = "1", -- Unique sensor ID (string or number, e.g. "1", "2", "3")
-    API_URL = "http://192.168.1.40:5005/powerstation/api/battery",
+    NODE_ID = "accumulator_node_1",  -- unique across all nodes
+    NODE_TYPE = "accumulator",
+    API_URL = "http://192.168.1.41:5007/ingest",
 
     -- Battery box sides (set to nil if unused)
     BATTERY_0 = "back",
     BATTERY_1 = "right",
     BATTERY_2 = "left",
 
-    REPORT_INTERVAL = 5 -- seconds between reports
+    REPORT_INTERVAL = 5, -- seconds between reports
 }
 
 -- ============================================
@@ -31,7 +30,7 @@ local batteries = {}
 local function tryWrap(side)
     if side then
         local p = peripheral.wrap(side)
-        if p and p.getEnergyStored then
+        if p and p.getEnergy then
             return p
         end
     end
@@ -51,27 +50,38 @@ end
 -- UTILS
 -- ============================================
 
--- Aggregate total energy across all connected batteries
-local function getTotalEnergy()
-    local total = 0
+-- Sum energy and capacity across all connected batteries (Batt_1 + Batt_2 + Batt_3)
+local function getTotals()
+    local totalEnergy = 0
+    local totalCapacity = 0
 
     for _, battery in pairs(batteries) do
         if battery then
-            local ok, value = pcall(battery.getEnergyStored)
-            if ok and type(value) == "number" then
-                total = total + value
+            local okE, energy = pcall(battery.getEnergy)
+            local okC, capacity = pcall(battery.getCapacity)
+
+            if okE and type(energy) == "number" then
+                totalEnergy = totalEnergy + energy
+            end
+            if okC and type(capacity) == "number" then
+                totalCapacity = totalCapacity + capacity
             end
         end
     end
 
-    return total
+    return totalEnergy, totalCapacity
 end
 
--- Send battery reading to the API
-local function reportBattery(totalEnergy)
+-- Send combined battery reading to the API
+local function reportBattery(totalEnergy, totalCapacity, percent)
     local payload = textutils.serializeJSON({
-        sensor = CONFIG.SENSOR_ID,
-        battery = totalEnergy
+        node_id = CONFIG.NODE_ID,
+        type = CONFIG.NODE_TYPE,
+        values = {
+            energy = totalEnergy,
+            capacity = totalCapacity,
+            percent = percent,
+        },
     })
 
     local response = http.post(
@@ -93,11 +103,18 @@ end
 -- MAIN LOOP
 -- ============================================
 
-print("[INFO] Battery worker started")
-print("[INFO] Sensor ID:", CONFIG.SENSOR_ID)
+print("=== Battery Worker Started ===")
+print("Node ID: " .. CONFIG.NODE_ID)
 
 while true do
-    local totalEnergy = getTotalEnergy()
-    reportBattery(totalEnergy)
-    sleep(CONFIG.POLL_INTERVAL)
+    local totalEnergy, totalCapacity = getTotals()
+    local percent = 0
+    if totalCapacity > 0 then
+        percent = math.floor((totalEnergy / totalCapacity) * 100)
+    end
+
+    reportBattery(totalEnergy, totalCapacity, percent)
+    print("[RPT] Energy: " .. totalEnergy .. " / " .. totalCapacity .. " FE (" .. percent .. "%)")
+
+    sleep(CONFIG.REPORT_INTERVAL)
 end

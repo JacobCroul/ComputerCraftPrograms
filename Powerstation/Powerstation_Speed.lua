@@ -1,9 +1,9 @@
--- PowerStation Stress Monitor Client
--- Reports stress and max_stress from Stressometer to the Powerstation API (read-only)
+-- PowerStation Speed Monitor Client
+-- Reports speed from Speedometer to the Powerstation API (read-only)
 
 local CONFIG = {
-    NODE_ID = "stressometer_1",   -- unique across all nodes
-    NODE_TYPE = "stressometer",
+    NODE_ID = "speedometer_1",    -- unique across all nodes
+    NODE_TYPE = "speedometer",
     API_URL = "http://192.168.1.41:5007/ingest",
     PERIPHERAL_SIDE = "back",
     REPORT_INTERVAL = 5,
@@ -14,35 +14,34 @@ if not adapter then
     error("[FATAL] No peripheral on side: " .. CONFIG.PERIPHERAL_SIDE)
 end
 
-local lastReportedStress = nil
+local lastReportedSpeed = nil
 local lastReportTime = 0
 
-print("=== Stress Monitor Started ===")
+print("=== Speed Monitor Started ===")
 print("Node ID: " .. CONFIG.NODE_ID)
 print("")
 
 while true do
     local now = os.clock()
-    local stress, maxStress = nil, nil
+    local speed = nil
 
-    local success, s, ms = pcall(function()
-        return adapter.getStress(), adapter.getStressCapacity()
+    local success, result = pcall(function()
+        return adapter.getSpeed()
     end)
 
     if success then
-        stress, maxStress = s, ms
+        speed = result
     end
 
     -- report on change, or as a heartbeat every REPORT_INTERVAL seconds
-    local shouldReport = stress ~= nil and (stress ~= lastReportedStress or (now - lastReportTime) >= CONFIG.REPORT_INTERVAL)
+    local shouldReport = speed ~= nil and (speed ~= lastReportedSpeed or (now - lastReportTime) >= CONFIG.REPORT_INTERVAL)
 
     if shouldReport then
         local payload = textutils.serializeJSON({
             node_id = CONFIG.NODE_ID,
             type = CONFIG.NODE_TYPE,
             values = {
-                stress = stress,
-                max_stress = maxStress,
+                speed = speed,
             },
         })
 
@@ -53,9 +52,9 @@ while true do
         )
 
         if response then
-            print("[RPT] Stress: " .. stress .. " / " .. maxStress .. " SU")
+            print("[RPT] Speed: " .. speed .. " rpm")
             response.close()
-            lastReportedStress = stress
+            lastReportedSpeed = speed
             lastReportTime = now
         else
             print("[WARN] Failed to reach API")
