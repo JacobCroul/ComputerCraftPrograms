@@ -6,8 +6,7 @@ local CONFIG = {
     NODE_TYPE = "rsc",
     API_INGEST_URL = "http://192.168.1.41:5007/ingest",
     API_COMMAND_URL = "http://192.168.1.41:5007/command",
-    PERIPHERAL_SIDE = "back",
-    ADAPTER_DIRECTION = "back",   -- Direction RSC is connected to adapter
+    PERIPHERAL_SIDE = "back",     -- side the RSC itself is on
     POLL_INTERVAL = 2,            -- seconds between command polls
     REPORT_INTERVAL = 5,          -- seconds between state reports
 }
@@ -15,13 +14,15 @@ local CONFIG = {
 -- ============================================
 -- PERIPHERAL SETUP
 -- ============================================
-local adapter = peripheral.wrap(CONFIG.PERIPHERAL_SIDE)
-if not adapter then
+-- The RSC exposes setTargetSpeed/getTargetSpeed directly when wrapped as
+-- its own peripheral - no digital adapter or direction argument needed.
+local rsc = peripheral.wrap(CONFIG.PERIPHERAL_SIDE)
+if not rsc then
     error("[FATAL] No peripheral found on side: " .. CONFIG.PERIPHERAL_SIDE)
 end
 
-if not adapter.setTargetSpeed then
-    error("[FATAL] Peripheral does not have setTargetSpeed method. Is this a Digital Adapter with RSC?")
+if not rsc.setTargetSpeed then
+    error("[FATAL] Peripheral does not have setTargetSpeed method. Is this the RSC?")
 end
 
 -- ============================================
@@ -80,7 +81,7 @@ end
 -- ============================================
 local function setRSCSpeed(speed)
     local success, err = pcall(function()
-        adapter.setTargetSpeed(CONFIG.ADAPTER_DIRECTION, speed)
+        rsc.setTargetSpeed(speed)
     end)
 
     if not success then
@@ -92,7 +93,7 @@ end
 
 local function getCurrentSpeed()
     local success, result = pcall(function()
-        return adapter.getTargetSpeed(CONFIG.ADAPTER_DIRECTION)
+        return rsc.getTargetSpeed()
     end)
 
     if success then
