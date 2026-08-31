@@ -23,7 +23,7 @@ local SOURCES = {
   }
 }
 
-local root_url = nil
+local root_url = SOURCES.github.root_url -- Default to GitHub, can be changed by user selection
 local updater_url = nil
 
 --=====================================
