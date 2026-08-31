@@ -76,12 +76,15 @@ local programs = {
   },
   powerstation = {
     name = "Powerstation",
-    itemOrder = {"server", "client", "serverTest", "clientTest"},
+    itemOrder = {"battery", "relay", "rsc", "speed", "stress", "inner", "outer"},
     items = {
-        server = {url = root_url .. "Powerstation/Powerstation_Server.lua", filename = "Powerstation_Server.lua"},
-        client = {url = root_url .. "Powerstation/Powerstation_Client.lua", filename = "Powerstation_Client.lua"},
-        serverTest = {url = root_url .. "Powerstation/PS_Server_test.lua", filename = "PS_Server_test.lua"},
-        clientTest = {url = root_url .. "Powerstation/PS_Client_test.lua", filename = "PS_Client_test.lua"},
+        battery = {url = root_url .. "Powerstation/Powerstation_Battery.lua", filename = "Powerstation_Battery.lua"},
+        relay = {url = root_url .. "Powerstation/Powerstation_Relay.lua", filename = "Powerstation_Relay.lua"},
+        rsc = {url = root_url .. "Powerstation/Powerstation_RSC.lua", filename = "Powerstation_RSC.lua"},
+        speed = {url = root_url .. "Powerstation/Powerstation_Speed.lua", filename = "Powerstation_Speed.lua"},
+        stress = {url = root_url .. "Powerstation/Powerstation_Stress.lua", filename = "Powerstation_Stress.lua"},
+        inner = {url = root_url .. "Powerstation/Powerstation_Inner_Defence.lua", filename = "Powerstation_Inner_Defence.lua"},
+        outer = {url = root_url .. "Powerstation/Powerstation_Outer_Defence.lua", filename = "Powerstation_Outer_Defence.lua"},
     }
   },
   todo = {
