@@ -50,14 +50,11 @@ local function fetchCommand()
     return data.value
 end
 
-local function reportState(throughput, isOn)
+local function reportState(values)
     local payload = textutils.serializeJSON({
         node_id = CONFIG.NODE_ID,
         type = CONFIG.NODE_TYPE,
-        values = {
-            throughput = throughput,
-            is_on = isOn,
-        },
+        values = values,
     })
 
     local response = http.post(
@@ -94,24 +91,35 @@ while true do
         end
     end
 
-    -- 2. Report throughput + on/off state periodically (or when changed)
-    local success, throughput = pcall(function()
+    -- 2. Report on/off state + throughput periodically (or when changed).
+    -- is_on is decoupled from the throughput read so a failed/errored
+    -- throughput read (e.g. relay off, nothing passing through) never
+    -- blocks reporting the on/off state - that's the field the dashboard
+    -- toggle depends on, and it should always be reportable immediately.
+    local isOn = redstone.getOutput(CONFIG.RELAY_SIDE)
+    local throughputOk, throughput = pcall(function()
         return relay.getThroughput()
     end)
-    local isOn = redstone.getOutput(CONFIG.RELAY_SIDE)
 
-    if success and throughput then
-        local shouldReport = (throughput ~= lastReportedThroughput)
-            or (isOn ~= lastReportedState)
-            or ((now - lastReportTime) >= CONFIG.REPORT_INTERVAL)
+    local stateChanged = (isOn ~= lastReportedState)
+    local throughputChanged = throughputOk and (throughput ~= lastReportedThroughput)
+    local heartbeatDue = (now - lastReportTime) >= CONFIG.REPORT_INTERVAL
 
-        if shouldReport then
-            if reportState(throughput, isOn) then
+    if stateChanged or throughputChanged or heartbeatDue then
+        local values = { is_on = isOn }
+        if throughputOk and throughput then
+            values.throughput = throughput
+        end
+
+        if reportState(values) then
+            lastReportedState = isOn
+            if throughputOk then
                 lastReportedThroughput = throughput
-                lastReportedState = isOn
-                lastReportTime = now
-                print("[RPT] Throughput: " .. throughput .. " FE, State: " .. (isOn and "ON" or "OFF"))
             end
+            lastReportTime = now
+
+            local throughputStr = (throughputOk and throughput) and (throughput .. " FE") or "n/a"
+            print("[RPT] State: " .. (isOn and "ON" or "OFF") .. ", Throughput: " .. throughputStr)
         end
     end
 
