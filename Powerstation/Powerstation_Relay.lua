@@ -7,7 +7,8 @@ local CONFIG = {
     API_INGEST_URL = "http://192.168.1.41:5007/ingest",
     API_COMMAND_URL = "http://192.168.1.41:5007/command",
     PERIPHERAL_SIDE = "back",     -- side wired to the Create redstone relay
-    RELAY_SIDE = "back",          -- side for redstone output
+    RELAY_SIDE = "back",          -- side for redstone output (drives the relay)
+    OVERRIDE_SIDE = "left",       -- separate side wired ONLY to the manual override lever - must NOT share a wire with RELAY_SIDE, or this computer will read its own output back as "lever on"
     POLL_INTERVAL = 2,            -- seconds between command polls
     REPORT_INTERVAL = 5,          -- seconds between state reports
 }
@@ -23,6 +24,22 @@ end
 -- ============================================
 -- STATE TRACKING
 -- ============================================
+-- The relay block itself exposes no readable redstone signal in either
+-- direction (confirmed via `redstone probe` - no input detected, and
+-- getOutput only echoes the computer's own last command anyway). There is
+-- no hardware path to read the relay's true state back from RELAY_SIDE.
+--
+-- Manual override: a lever, wired into a SEPARATE side (OVERRIDE_SIDE) not
+-- shared with RELAY_SIDE, lets someone physically force the relay on
+-- regardless of software state. The relay's actual physical power state is
+-- naturally OR'd by vanilla redstone if the lever and RELAY_SIDE's output
+-- both feed the same node at the relay - no extra logic needed for that
+-- part. What we DO need extra logic for is *reporting* accurately: is_on
+-- reported to HA = commandedState (what we last told it) OR the lever
+-- reading on OVERRIDE_SIDE (confirmed via testing: reading the computer's
+-- own output side back gives a false positive, so the lever must be on its
+-- own dedicated side to be read cleanly).
+local commandedState = false   -- assume off until a command says otherwise
 local lastReportedThroughput = nil
 local lastReportedState = nil
 local lastReportTime = 0
@@ -86,17 +103,24 @@ while true do
         lastPollTime = now
 
         if commandValue ~= nil then
-            redstone.setOutput(CONFIG.RELAY_SIDE, commandValue == true)
-            print("[CMD] Relay " .. (commandValue and "ON" or "OFF"))
+            local newState = commandValue == true
+            redstone.setOutput(CONFIG.RELAY_SIDE, newState)
+            commandedState = newState
+            print("[CMD] Relay " .. (commandedState and "ON" or "OFF"))
         end
     end
 
     -- 2. Report on/off state + throughput periodically (or when changed).
+    -- is_on = commandedState (software) OR the lever reading on the
+    -- dedicated OVERRIDE_SIDE (manual). Either one being true means the
+    -- relay is genuinely powered, since the real relay input is a physical
+    -- OR of these same two sources.
     -- is_on is decoupled from the throughput read so a failed/errored
-    -- throughput read (e.g. relay off, nothing passing through) never
+    -- throughput read (e.g. nothing currently passing through) never
     -- blocks reporting the on/off state - that's the field the dashboard
-    -- toggle depends on, and it should always be reportable immediately.
-    local isOn = redstone.getOutput(CONFIG.RELAY_SIDE)
+    -- toggle depends on.
+    local manualOverride = redstone.getInput(CONFIG.OVERRIDE_SIDE)
+    local isOn = commandedState or manualOverride
     local throughputOk, throughput = pcall(function()
         return relay.getThroughput()
     end)
@@ -119,7 +143,8 @@ while true do
             lastReportTime = now
 
             local throughputStr = (throughputOk and throughput) and (throughput .. " FE") or "n/a"
-            print("[RPT] State: " .. (isOn and "ON" or "OFF") .. ", Throughput: " .. throughputStr)
+            local sourceStr = manualOverride and " (manual override)" or ""
+            print("[RPT] State: " .. (isOn and "ON" or "OFF") .. sourceStr .. ", Throughput: " .. throughputStr)
         end
     end
 
