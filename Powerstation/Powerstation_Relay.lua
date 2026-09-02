@@ -24,6 +24,7 @@ end
 -- STATE TRACKING
 -- ============================================
 local lastReportedThroughput = nil
+local lastReportedState = nil
 local lastReportTime = 0
 local lastPollTime = 0
 
@@ -49,12 +50,13 @@ local function fetchCommand()
     return data.value
 end
 
-local function reportThroughput(throughput)
+local function reportState(throughput, isOn)
     local payload = textutils.serializeJSON({
         node_id = CONFIG.NODE_ID,
         type = CONFIG.NODE_TYPE,
         values = {
             throughput = throughput,
+            is_on = isOn,
         },
     })
 
@@ -92,19 +94,23 @@ while true do
         end
     end
 
-    -- 2. Report throughput periodically (or when changed)
+    -- 2. Report throughput + on/off state periodically (or when changed)
     local success, throughput = pcall(function()
         return relay.getThroughput()
     end)
+    local isOn = redstone.getOutput(CONFIG.RELAY_SIDE)
 
     if success and throughput then
-        local shouldReport = (throughput ~= lastReportedThroughput) or ((now - lastReportTime) >= CONFIG.REPORT_INTERVAL)
+        local shouldReport = (throughput ~= lastReportedThroughput)
+            or (isOn ~= lastReportedState)
+            or ((now - lastReportTime) >= CONFIG.REPORT_INTERVAL)
 
         if shouldReport then
-            if reportThroughput(throughput) then
+            if reportState(throughput, isOn) then
                 lastReportedThroughput = throughput
+                lastReportedState = isOn
                 lastReportTime = now
-                print("[RPT] Throughput: " .. throughput .. " FE")
+                print("[RPT] Throughput: " .. throughput .. " FE, State: " .. (isOn and "ON" or "OFF"))
             end
         end
     end
