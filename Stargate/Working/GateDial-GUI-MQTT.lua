@@ -24,6 +24,22 @@ local lastDestinationUpdate = 0  -- Track when we last fetched destinations
 -- Shared WebSocket connection (set by wsLoop, used by reportStatusToAPI)
 local wsConnection = nil
 
+-- Pushes one live feedback line to the server's feedback sensor. Lightweight
+-- on purpose, no HTTP fallback, if the WS is down the line is just dropped,
+-- it's a live feed rather than something that needs to persist.
+local function reportLogToAPI(message)
+    if not CONFIG.API_ENABLED or not wsConnection then
+        return
+    end
+
+    local payload = textutils.serializeJSON({
+        type    = "log",
+        gate    = CONFIG.STARGATE_NAME,
+        message = message,
+    })
+    pcall(wsConnection.send, payload)
+end
+
 -- ============================================
 -- GLOBALS & STATE
 -- ============================================
@@ -68,6 +84,8 @@ local function log(message, color)
     if CONFIG.DEBUG_MODE then
         print("[" .. timestamp .. "] " .. message)
     end
+
+    reportLogToAPI(timestamp .. " " .. message)
 end
 
 local function hasMethod(obj, methodName)
@@ -1135,13 +1153,33 @@ local function handleCommand(data)
 
     print("[WS] ✓ Command: " .. data.action .. (data.to and (" -> " .. data.to) or ""))
 
-    if data.action == "open" and data.to then
-        local address = DESTINATIONS[data.to]
-        if address then
-            log("WS: Dialing " .. data.to, colors.cyan)
-            dialAddress(address)
+    if data.action == "open" then
+        if data.to then
+            local address = DESTINATIONS[data.to]
+            if address then
+                log("WS: Dialing " .. data.to, colors.cyan)
+                dialAddress(address)
+            else
+                log("WS: Unknown destination '" .. data.to .. "'", colors.red)
+            end
+        elseif data.address then
+            -- Manual address dial (typed in via the Dial Address text box on HAOS)
+            local addressTable = {}
+            for numStr in string.gmatch(data.address, "[^,]+") do
+                local num = tonumber(numStr:match("^%s*(.-)%s*$"))
+                if num then
+                    table.insert(addressTable, num)
+                end
+            end
+
+            if #addressTable > 0 then
+                log("WS: Dialing manual address " .. data.address, colors.cyan)
+                dialAddress(addressTable)
+            else
+                log("WS: Invalid manual address '" .. tostring(data.address) .. "'", colors.red)
+            end
         else
-            log("WS: Unknown destination '" .. data.to .. "'", colors.red)
+            log("WS: Open command with no destination or address", colors.red)
         end
 
     elseif data.action == "close" then
