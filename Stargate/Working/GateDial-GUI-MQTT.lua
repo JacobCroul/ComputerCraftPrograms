@@ -821,6 +821,20 @@ local function dialBasicInterface(address)
         -- Alternate direction for next symbol
         direction = (direction == "clockwise") and "anticlockwise" or "clockwise"
     end
+
+    -- ==========================================
+    -- FIX: Engage the Stargate after POO is encoded
+    -- ==========================================
+    if hasMethod(interface, "engageStargate") then
+        local okEngage, errEngage = pcall(function()
+            interface.engageStargate()
+        end)
+        if okEngage then
+            log("Engaging Stargate...", colors.lime)
+        else
+            log("ERROR engaging stargate: " .. tostring(errEngage), colors.red)
+        end
+    end
     
     state.dialing = false
     log("BASIC DIAL COMPLETE!", colors.green)
