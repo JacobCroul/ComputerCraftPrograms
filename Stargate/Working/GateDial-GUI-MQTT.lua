@@ -1222,7 +1222,7 @@ local function wsLoop()
         while true do os.sleep(3600) end
     end
 
-    local wsURL = CONFIG.WS_URL .. CONFIG.STARGATE_NAME
+    local wsURL = CONFIG.WS_URL .. "/" .. CONFIG.STARGATE_NAME
     print("[WS] Connecting to " .. wsURL)
 
     while true do
