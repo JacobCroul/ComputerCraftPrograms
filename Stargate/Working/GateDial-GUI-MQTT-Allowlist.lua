@@ -9,13 +9,15 @@
 -- ============================================
 -- CONFIGURATION
 -- ============================================
+-- The one place to point this computer at the API: host or IP and port, no http://
+local API_HOST = "127.0.0.1:5006"
+
 local CONFIG = {
-    STARGATE_NAME = "Earth",  -- Name of this Stargate
-    STARGATE_ADDRESS = {1, 2, 3, 4, 5, 6, 0},  -- Address of this Stargate
-    API_URL = "http://127.0.0.1:5006/api",
-    API_STATUS_URL = "http://127.0.0.1:5006/api/status",
-    WS_URL = "ws://127.0.0.1:5006/ws",  -- Gate name appended at runtime
-    PERMISSIONS_URL = "http://127.0.0.1:5006/api/permissions",  -- Gate name appended at runtime
+    STARGATE_NAME = "Earth",  -- Name of this Stargate. Its address is kept by the API, set it on /admin
+    API_URL = "http://" .. API_HOST .. "/api",
+    API_STATUS_URL = "http://" .. API_HOST .. "/api/status",
+    WS_URL = "ws://" .. API_HOST .. "/ws",  -- Gate name appended at runtime
+    PERMISSIONS_URL = "http://" .. API_HOST .. "/api/permissions",  -- Gate name appended at runtime
     PERMISSIONS_CACHE = "permissions.cache",  -- Last rules received, survives reboots
     PERMISSIONS_REFRESH = 60,  -- Seconds between HTTP refreshes (the websocket push is the main path)
     API_ENABLED = true,
@@ -113,11 +115,7 @@ local function reportStatusToAPI()
         return 
     end
     
-    -- This gate's OWN address (always reported)
-    local ownAddressStr = ""
-    if CONFIG.STARGATE_ADDRESS and type(CONFIG.STARGATE_ADDRESS) == "table" then
-        ownAddressStr = table.concat(CONFIG.STARGATE_ADDRESS, ",")
-    end
+    -- This gate's own address is not reported: the API owns every address
     
     -- What we're DIALING or CONNECTED TO
     local dialedAddressStr = ""
@@ -175,11 +173,10 @@ local function reportStatusToAPI()
         end
     end
     
-    -- Build query parameters with BOTH addresses
+    -- Build query parameters (this gate's own address is the API's job)
     local queryParams = string.format(
-        "?gate=%s&address=%s&dialed_address=%s&status=%s&iris=%s&locked_chevrons=%d",
+        "?gate=%s&dialed_address=%s&status=%s&iris=%s&locked_chevrons=%d",
         textutils.urlEncode(CONFIG.STARGATE_NAME),
-        textutils.urlEncode(ownAddressStr),           -- This gate's coordinates
         textutils.urlEncode(dialedAddressStr),        -- What we're dialing/connected to
         textutils.urlEncode(apiStatus),
         textutils.urlEncode(irisState),
@@ -192,7 +189,6 @@ local function reportStatusToAPI()
         local wsPayload = textutils.serializeJSON({
             type            = "status",
             gate            = CONFIG.STARGATE_NAME,
-            address         = ownAddressStr,
             dialed_address  = dialedAddressStr,
             status          = apiStatus,
             iris            = irisState,
