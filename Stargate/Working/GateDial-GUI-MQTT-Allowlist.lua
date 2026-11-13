@@ -65,6 +65,7 @@ local state = {
     irisProgress = 0,  -- NEW
     status = "Initializing...",
     chevrons = {false, false, false, false, false, false, false, false, false},
+    chevronTotal = 7,  -- chevrons used by the address being dialed: 7, 8 or 9
     energy = 0,
     energyMax = 1,
     connectedAddress = nil,
@@ -837,7 +838,7 @@ local function dialBasicInterface(address)
     local direction = "clockwise"
     
     for i, targetSymbol in ipairs(address) do
-        if i > 7 then 
+        if i > 9 then -- 9 is the most any gate has, dialAddress already rejects longer addresses 
             break 
         end
         
@@ -971,6 +972,14 @@ local function dialAddress(address)
         return false
     end
 
+    -- 7 symbols = solar system in this galaxy, 8 = another galaxy, 9 = one specific
+    -- gate. The last symbol is the point of origin. Any other length cannot open a
+    -- wormhole, and an address must never be silently cut short.
+    if type(address) ~= "table" or #address < 7 or #address > 9 then
+        log("DENIED: address must be 7 to 9 symbols", colors.red)
+        return false
+    end
+
     if state.status ~= "IDLE" then
         log("Cannot dial - gate busy!", colors.red)
         return false
@@ -987,7 +996,8 @@ local function dialAddress(address)
         refreshPeripherals()
     end
     
-    log("Starting dial sequence...", colors.yellow)
+    log("Starting dial sequence (" .. #address .. " chevrons)...", colors.yellow)
+    state.chevronTotal = #address
     
     local success = false
     if state.interfaceType == "basic_interface" then
@@ -1077,7 +1087,9 @@ local function renderMainScreen()
     
     -- Chevron Indicators (moved up to line 11)
     drawText(1, 11, "Chevrons:", colors.cyan)
-    for i = 1, 7 do
+    -- 7, 8 or 9 slots depending on the address being dialed
+    local shownChevrons = ((state.dialing or state.status ~= "IDLE") and state.chevronTotal) or 7
+    for i = 1, math.max(7, shownChevrons) do
         local symbol = state.chevrons[i] and "<#>" or "< >"
         local color = state.chevrons[i] and colors.lime or colors.gray
         drawText(11 + (i * 4), 11, symbol, color)
